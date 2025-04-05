@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Walden EPUB Reader</title>
+  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    #viewer {
+      height: 100%;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <script>
+    const book = ePub("Walden.epub");
+    const rendition = book.renderTo("viewer", {
+      width: "100%",
+      height: "100%",
+    });
+    rendition.display();
+  </script>
+</body>
+</html>

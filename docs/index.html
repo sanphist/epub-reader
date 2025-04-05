@@ -91,6 +91,99 @@
   <div id="viewer"></div>
   <div id="status">📄 Reader 加载完毕，等待上传 EPUB...</div>
 
+
+<script>
+if (window.__EPUB_READER_LOADED__) {
+  console.log("🟡 阅读器已加载，跳过重复构建。");
+} else {
+  window.__EPUB_READER_LOADED__ = true;
+
+} // 初始化结束
+</script>
+  <script src="https://unpkg.com/epubjs/dist/epub.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      background: #f4f4f4;
+    }
+    #top-bar {
+      padding: 10px;
+      background: #fafafa;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    #top-bar > * {
+      font-size: 15px;
+      padding: 4px 8px;
+    }
+    #viewer {
+      flex-grow: 1;
+      width: 100%;
+      background: white;
+    }
+    #progress-bar {
+      height: 4px;
+      background: #4caf50;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    #status {
+      font-size: 14px;
+      padding: 8px 12px;
+      background: #fff8dc;
+      min-height: 48px;
+      overflow-y: auto;
+    }
+    .dark-mode {
+      background-color: #121212 !important;
+      color: #eaeaea !important;
+    }
+    .highlight {
+      background-color: yellow;
+      padding: 0 2px;
+    }
+    .dark-mode .highlight {
+      background-color: #ffca28;
+    }
+  </style>
+</head>
+<body>
+  <div id="top-bar">
+    <input type="file" id="upload" accept=".epub" />
+    <select id="chapters"><option value="">📖 请选择章节</option></select>
+    <button id="prev">⬅️ 上一页</button>
+    <button id="next">➡️ 下一页</button>
+    <select id="fontSelect">
+      <option value="Microsoft YaHei Light">微软雅黑 Light</option>
+      <option value="Noto Sans">Noto Sans</option>
+      <option value="serif">Serif</option>
+      <option value="sans-serif">系统默认</option>
+    </select>
+    <button id="lineUp">🔼 增大行距</button>
+    <button id="lineDown">🔽 缩小行距</button>
+    <button id="modeToggle">📖 分页</button>
+    <button id="nightToggle">🌙 夜间</button>
+    <input type="file" id="dictUpload" accept=".txt,.xlsx" />
+    <select id="colorSelect">
+      <option value="yellow">黄色</option>
+      <option value="lightblue">浅蓝</option>
+      <option value="pink">粉色</option>
+    </select>
+    <label><input type="checkbox" id="caseSensitive"> 区分大小写</label>
+  </div>
+  <div id="progress-bar"></div>
+  <div id="viewer"></div>
+  <div id="status">📄 Reader 加载完毕，等待上传 EPUB...</div>
+
 <script>
 let book, rendition;
 let fontSize = 100, lineHeight = 1.5, isPaged = true, highlights = new Set(), highlightColor = "yellow";

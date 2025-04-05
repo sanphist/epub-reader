@@ -1,137 +1,98 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EPUB阅读器-高亮修复版</title>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <style>
-    /* 优化后的CSS样式 */
-    html, body { margin:0; padding:0; height:100%; font-family:sans-serif; display:flex; flex-direction:column; background:#f4f4f4; }
-    #top-bar { padding:6px; background:#eee; display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
-    #viewer { flex-grow:1; overflow:auto; background:#fff; }
-    #status { font-size:12px; padding:4px; background:#fff8dc; }
-    body.dark { background:#121212; color:#eee; }
-    body.dark #viewer { background:#121212; }
-    body.dark #top-bar { background:#333; }
-    .epub-highlight { background-color: rgba(255, 255, 0, 0.3) !important; }
-  </style>
-</head>
-<body>
-<div id="top-bar">
-  <input type="file" id="upload" accept=".epub">
-  <select id="chapters"><option>📖 章节</option></select>
-  <button id="prev">⬅</button><button id="next">➡</button><button id="nextChapter">⏩ 下一章</button>
-  <select id="fontSelect">
-    <option value="Microsoft YaHei Light">微软雅黑 Light</option>
-    <option value="serif">Serif</option>
-    <option value="sans-serif">系统默认</option>
-  </select>
-  <button id="incFont">🔼</button><button id="decFont">🔽</button><button id="toggleDark">🌙</button>
-  <input type="file" id="dictUpload" accept=".txt,.xlsx">
-  <select id="colorSelect"><option value="yellow">黄色</option><option value="lightblue">浅蓝</option></select>
-  <label><input type="checkbox" id="case">区分大小写</label>
-  <button id="exportDict">💾 导出词表</button>
-</div>
-<div id="viewer"></div>
-<div id="status">📄 准备就绪，等待上传 EPUB。</div>
 
-<script>
-// 修复后的完整JavaScript代码
-let book, rendition, highlights = new Set(), fontSize = 100, isDark = false, highlightColor = "yellow", caseSensitive = false;
-const $ = id => document.getElementById(id);
+&lt;!DOCTYPE html&gt;
+&lt;html lang="zh"&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;title&gt;完整版 EPUB 高亮词表阅读器（修正版）&lt;/title&gt;
+  &lt;meta name="viewport" content="width=device-width,initial-scale=1"&gt;
+  &lt;script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"&gt;&lt;/script&gt;
+  &lt;script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"&gt;&lt;/script&gt;
+  &lt;script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"&gt;&lt;/script&gt;
+  &lt;style&gt;
+    html,body{margin:0;padding:0;height:100%;overflow:hidden;font-family:sans-serif;background:#f7f7f7;}
+    #top-bar{padding:5px;background:#eee;display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+    #viewer{height:calc(100% - 70px);background:#fff;overflow:auto;}
+    #status{height:20px;padding:4px;font-size:12px;background:#fffae6;}
+    .highlight{background-color:yellow;}
+    .dark-mode{background:#121212;color:#eaeaea;}
+  &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id="top-bar"&gt;
+  &lt;input type="file" id="upload" accept=".epub"&gt;
+  &lt;select id="chapters"&gt;&lt;option&gt;请选择章节&lt;/option&gt;&lt;/select&gt;
+  &lt;button id="prev"&gt;⬅️上一页&lt;/button&gt;
+  &lt;button id="next"&gt;➡️下一页&lt;/button&gt;
+  &lt;button id="nextChapter"&gt;⏩下一章&lt;/button&gt;
+  &lt;select id="fontSelect"&gt;
+    &lt;option value="Microsoft YaHei Light"&gt;微软雅黑 Light&lt;/option&gt;
+    &lt;option value="serif"&gt;Serif&lt;/option&gt;
+    &lt;option value="sans-serif"&gt;Sans-serif&lt;/option&gt;
+  &lt;/select&gt;
+  &lt;button id="increaseFont"&gt;🔼增字号&lt;/button&gt;
+  &lt;button id="decreaseFont"&gt;🔽减字号&lt;/button&gt;
+  &lt;button id="toggleNight"&gt;🌙夜间模式&lt;/button&gt;
+  &lt;input type="file" id="dictUpload" accept=".txt,.xlsx"&gt;
+  &lt;select id="colorSelect"&gt;&lt;option value="yellow"&gt;黄色&lt;/option&gt;&lt;option value="pink"&gt;粉色&lt;/option&gt;&lt;/select&gt;
+  &lt;label&gt;&lt;input type="checkbox" id="caseSensitive"&gt;大小写敏感&lt;/label&gt;
+&lt;/div&gt;
+&lt;div id="viewer"&gt;&lt;/div&gt;
+&lt;div id="status"&gt;📖等待上传EPUB...&lt;/div&gt;
 
-function cleanHighlights(doc) {
-  doc.querySelectorAll('span[style*="background-color"]').forEach(hl => {
-    const text = doc.createTextNode(hl.textContent);
-    hl.parentNode.replaceChild(text, hl);
+&lt;script&gt;
+let book,rendition,highlights=new Set(),isDark=false,fontSize=100,highlightColor='yellow',caseSensitive=false;
+
+upload.onchange=function(){
+  book=ePub(this.files[0]);
+  rendition=book.renderTo("viewer",{flow:"scrolled-doc",width:"100%",height:"100%"});
+  rendition.display();
+  book.loaded.navigation.then(nav=&gt;{
+    chapters.innerHTML=nav.toc.map(c=&gt;`&lt;option value="${c.href}"&gt;${c.label}&lt;/option&gt;`).join('');
   });
-}
-
-function buildRegex(words) {
-  const escaped = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  return new RegExp(`\\b(${escaped.join('|')})\\b`, caseSensitive ? 'g' : 'gi');
-}
-
-function injectStyle(doc) {
-  const style = doc.createElement("style");
-  style.innerHTML = `body, p, div, span { 
-    font-family: "${$("fontSelect").value}" !important; 
-    font-size: ${fontSize}% !important; 
-    background: ${isDark ? "#121212" : "#fff"} !important; 
-    color: ${isDark ? "#eee" : "#000"} !important; 
-  }`;
-  doc.head.appendChild(style);
-}
-
-function highlightWords(doc) {
-  cleanHighlights(doc);
-  if (!highlights.size) return;
-  
-  const words = [...highlights].filter(w => w.length >= 2);
-  if (words.length === 0) return;
-  
-  const regex = buildRegex(words);
-  const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
-  const textNodes = [];
-  
-  while (walker.nextNode()) {
-    const node = walker.currentNode;
-    if (node.parentNode.nodeName === 'MARK') continue;
-    if (regex.test(node.textContent)) textNodes.push(node);
-  }
-
-  textNodes.forEach(node => {
-    const newHtml = node.textContent.replace(regex, '<mark class="epub-highlight" style="background-color: '+highlightColor+';">$1</mark>');
-    const wrapper = document.createElement('span');
-    wrapper.innerHTML = newHtml;
-    node.parentNode.replaceChild(wrapper, node);
+  rendition.on("rendered",()=&gt;{
+    applyTheme();
+    applyHighlights();
   });
-}
-
-// 事件监听与初始化代码
-document.addEventListener('DOMContentLoaded', () => {
-  $("upload").onchange = function() {
-    const file = this.files[0];
-    book = ePub(file);
-    rendition = book.renderTo("viewer", { flow: "scrolled-doc", width: "100%", height: "100%" });
-    
-    rendition.display().then(() => {
-      book.loaded.navigation.then(nav => {
-        $("chapters").innerHTML = nav.toc.map(c => 
-          `<option value="${c.href}">${c.label}</option>`
-        ).join("");
-      });
-    });
-
-    rendition.hooks.content.register(contents => {
-      const doc = contents.document;
-      injectStyle(doc);
-      highlightWords(doc);
-    });
-  };
-
-  // 其他事件监听保持不变...
-});
-
-// 导出功能
-$("exportDict").onclick = function() {
-  if (highlights.size === 0) {
-    $("status").textContent = "⚠️ 当前没有可导出的词表";
-    return;
-  }
-  const content = Array.from(highlights).join("\n");
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `highlight_words_${new Date().toISOString().slice(0,10)}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
-  $("status").textContent = `📤 已导出 ${highlights.size} 个词汇`;
 };
-</script>
-</body>
-</html>
+
+function applyTheme(){
+  rendition.themes.register("custom",{body:{"font-family":fontSelect.value,"font-size":fontSize+"%",color:isDark?"#eee":"#000",background:isDark?"#121212":"#fff"}});
+  rendition.themes.select("custom");
+}
+
+function applyHighlights(){
+  rendition.getContents().forEach(c=&gt;{
+    highlights.forEach(word=&gt;{
+      const reg=new RegExp(`\b(${word})\b`,caseSensitive?"g":"gi");
+      c.document.body.innerHTML=c.document.body.innerHTML.replace(reg,`&lt;mark class="highlight" style="background-color:${highlightColor}"&gt;$1&lt;/mark&gt;`);
+    });
+  });
+}
+
+chapters.onchange=()=&gt;rendition.display(chapters.value);
+prev.onclick=()=&gt;rendition.prev();
+next.onclick=()=&gt;rendition.next();
+
+nextChapter.onclick=()=&gt;{
+  let spine=book.spine.spineItems,idx=spine.findIndex(i=&gt;i.href==rendition.location.start.href);
+  if(idx&lt;spine.length-1)rendition.display(spine[idx+1].href);else alert('已是最后一章');
+};
+
+increaseFont.onclick=()=&gt;{fontSize+=10;applyTheme();};
+decreaseFont.onclick=()=&gt;{fontSize-=10;applyTheme();};
+fontSelect.onchange=applyTheme;
+toggleNight.onclick=()=&gt;{isDark=!isDark;applyTheme();};
+colorSelect.onchange=()=&gt;{highlightColor=colorSelect.value;applyHighlights();};
+caseSensitive.onclick=()=&gt;{caseSensitive=caseSensitive.checked;applyHighlights();};
+
+dictUpload.onchange=async()=&gt;{
+  highlights.clear();let f=this.files[0];
+  if(f.name.endsWith('.txt'))(await f.text()).split(/
+?
+/).map(l=&gt;highlights.add(l.trim()));
+  else if(f.name.endsWith('.xlsx'))XLSX.utils.sheet_to_json(XLSX.read(await f.arrayBuffer()).Sheets.Sheet1,{header:1}).map(r=&gt;highlights.add(r[0].trim()));
+  status.textContent=`✅已加载词表:${highlights.size}个`;applyHighlights();
+};
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;

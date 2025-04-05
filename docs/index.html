@@ -15,14 +15,21 @@
       display: flex;
       flex-direction: column;
     }
-    #upload {
-      margin: 10px;
+    #top-bar {
+      padding: 10px;
+      background: #fafafa;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #upload, #chapters {
       font-size: 16px;
     }
     #viewer {
       flex-grow: 1;
       width: 100%;
-      background: #fff;
+      background: white;
     }
     #status {
       font-size: 14px;
@@ -42,7 +49,12 @@
 </head>
 <body>
 
-  <input type="file" id="upload" accept=".epub" />
+  <div id="top-bar">
+    <input type="file" id="upload" accept=".epub" />
+    <select id="chapters">
+      <option value="">📖 请选择章节</option>
+    </select>
+  </div>
   <div id="progress-bar"></div>
   <div id="viewer"></div>
   <div id="status">📄 准备就绪，等待上传 EPUB 文件...</div>
@@ -52,6 +64,9 @@
     const viewer = document.getElementById("viewer");
     const status = document.getElementById("status");
     const progressBar = document.getElementById("progress-bar");
+    const chaptersDropdown = document.getElementById("chapters");
+
+    let book, rendition;
 
     function setStatus(msg) {
       status.textContent = msg;
@@ -76,26 +91,51 @@
       if (!file) return;
 
       setProgress(10);
-      setStatus("📦 正在加载 EPUB 文件：" + file.name);
+      setStatus("📦 正在读取 EPUB 文件：" + file.name);
+      chaptersDropdown.innerHTML = '<option value="">📖 请选择章节</option>';
 
       try {
-        const book = ePub(file);
-        const rendition = book.renderTo(viewer, {
+        book = ePub(file);
+        rendition = book.renderTo(viewer, {
           width: "100%",
           height: "100%",
         });
 
-        setProgress(40);
-        rendition.display()
-          .then(() => {
-            setProgress(100);
-            setStatus("✅ 渲染成功！");
-          })
-          .catch(err => logError(err));
+        setProgress(30);
+
+        book.ready.then(() => {
+          setProgress(60);
+
+          const first = book.spine.get(0);
+          rendition.display(first.href)
+            .then(() => {
+              setProgress(100);
+              setStatus("✅ EPUB 加载成功！");
+            });
+
+          return book.navigation.loaded;
+        }).then(nav => {
+          nav.toc.forEach((item, index) => {
+            const option = document.createElement("option");
+            option.textContent = item.label;
+            option.value = item.href;
+            chaptersDropdown.appendChild(option);
+          });
+        }).catch(err => logError(err));
       } catch (err) {
         logError(err);
       }
     });
+
+    chaptersDropdown.addEventListener("change", function () {
+      const href = this.value;
+      if (href && rendition) {
+        rendition.display(href).then(() => {
+          setStatus("📘 已跳转至章节：" + this.options[this.selectedIndex].text);
+        });
+      }
+    });
   </script>
+
 </body>
 </html>

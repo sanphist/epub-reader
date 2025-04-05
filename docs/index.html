@@ -1,14 +1,13 @@
 <!DOCTYPE html>
-<div id="status">📄 Reader v4 loaded — 等待上传 EPUB 文件...</div>
 <html lang="zh">
 <head>
   <meta charset="UTF-8" />
-  <title>EPUB Reader</title>
+  <title>EPUB 高亮词表阅读器</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- ✅ 保证兼容的 CDN 顺序 -->
   <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://unpkg.com/epubjs/dist/epub.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <style>
     html, body {
@@ -16,198 +15,183 @@
       padding: 0;
       height: 100%;
       font-family: sans-serif;
-      background: #f4f4f4;
       display: flex;
       flex-direction: column;
+      background: #f4f4f4;
     }
-
     #top-bar {
       padding: 10px;
       background: #fafafa;
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
     }
-
     #top-bar > * {
-      font-size: 16px;
+      font-size: 15px;
       padding: 4px 8px;
     }
-
     #viewer {
       flex-grow: 1;
       width: 100%;
       background: white;
     }
-
     #progress-bar {
       height: 4px;
       background: #4caf50;
       width: 0%;
       transition: width 0.3s ease;
     }
-
     #status {
       font-size: 14px;
-      padding: 10px;
-      color: #333;
+      padding: 8px 12px;
       background: #fff8dc;
-      min-height: 50px;
+      min-height: 48px;
       overflow-y: auto;
     }
-
     .dark-mode {
-      background-color: #111 !important;
-      color: #eee !important;
+      background-color: #121212 !important;
+      color: #eaeaea !important;
     }
-
-    .dark-mode #viewer {
-      background-color: #222 !important;
+    .highlight {
+      background-color: yellow;
+      padding: 0 2px;
     }
-
-    .dark-mode select, .dark-mode button, .dark-mode input {
-      background-color: #333 !important;
-      color: #eee !important;
-      border-color: #666 !important;
+    .dark-mode .highlight {
+      background-color: #ffca28;
     }
   </style>
 </head>
 <body>
-
   <div id="top-bar">
     <input type="file" id="upload" accept=".epub" />
-    <select id="chapters">
-      <option value="">📖 请选择章节</option>
-    </select>
+    <select id="chapters"><option value="">📖 请选择章节</option></select>
     <button id="prev">⬅️ 上一页</button>
     <button id="next">➡️ 下一页</button>
-    <button id="zoom-in">🔎 放大</button>
-    <button id="zoom-out">🔍 缩小</button>
-    <button id="toggle-mode">🌙 夜间</button>
+    <select id="fontSelect">
+      <option value="Microsoft YaHei Light">微软雅黑 Light</option>
+      <option value="Noto Sans">Noto Sans</option>
+      <option value="serif">Serif</option>
+      <option value="sans-serif">系统默认</option>
+    </select>
+    <button id="lineUp">🔼 增大行距</button>
+    <button id="lineDown">🔽 缩小行距</button>
+    <button id="modeToggle">📖 分页</button>
+    <button id="nightToggle">🌙 夜间</button>
+    <input type="file" id="dictUpload" accept=".txt,.xlsx" />
+    <select id="colorSelect">
+      <option value="yellow">黄色</option>
+      <option value="lightblue">浅蓝</option>
+      <option value="pink">粉色</option>
+    </select>
+    <label><input type="checkbox" id="caseSensitive"> 区分大小写</label>
   </div>
-
   <div id="progress-bar"></div>
   <div id="viewer"></div>
-  <div id="status">📄 准备就绪，等待上传 EPUB 文件...</div>
+  <div id="status">📄 Reader 加载完毕，等待上传 EPUB...</div>
 
-  <script>
-    const upload = document.getElementById("upload");
-    const viewer = document.getElementById("viewer");
-    const status = document.getElementById("status");
-    const progressBar = document.getElementById("progress-bar");
-    const chaptersDropdown = document.getElementById("chapters");
-    const prevBtn = document.getElementById("prev");
-    const nextBtn = document.getElementById("next");
-    const zoomInBtn = document.getElementById("zoom-in");
-    const zoomOutBtn = document.getElementById("zoom-out");
-    const toggleModeBtn = document.getElementById("toggle-mode");
+<script>
+let book, rendition;
+let fontSize = 100, lineHeight = 1.5, isPaged = true, highlights = new Set(), highlightColor = "yellow";
+let caseSensitive = false;
 
-    let book, rendition;
-    let fontSize = 100; // 百分比
-    let currentKey = "epub-book-position";
+const upload = document.getElementById("upload");
+const viewer = document.getElementById("viewer");
+const status = document.getElementById("status");
+const progressBar = document.getElementById("progress-bar");
+const chapters = document.getElementById("chapters");
+const fontSelect = document.getElementById("fontSelect");
+const lineUp = document.getElementById("lineUp");
+const lineDown = document.getElementById("lineDown");
+const modeToggle = document.getElementById("modeToggle");
+const nightToggle = document.getElementById("nightToggle");
+const dictUpload = document.getElementById("dictUpload");
+const colorSelect = document.getElementById("colorSelect");
+const caseCheckbox = document.getElementById("caseSensitive");
 
-    function setStatus(msg) {
-      status.textContent = msg;
-    }
+function setProgress(p) { progressBar.style.width = p + "%"; }
+function setStatus(msg) { status.innerText = msg; }
 
-    function logError(err) {
-      console.error(err);
-      setStatus("❌ 错误: " + (err?.message || err));
-    }
+function applyTheme() {
+  rendition.themes.override("font-family", fontSelect.value);
+  rendition.themes.override("font-size", fontSize + "%");
+  rendition.themes.override("line-height", lineHeight.toString());
+}
 
-    function setProgress(percent) {
-      progressBar.style.width = percent + "%";
-    }
+function highlightWords(text, words, color, sensitive) {
+  if (!words || words.length === 0) return text;
+  words = Array.from(words).sort((a, b) => b.length - a.length);
+  const escaped = words.map(w => w.replace(/[.*+?^${}()|[\]\]/g, '\$&'));
+  const flags = sensitive ? 'g' : 'gi';
+  const regex = new RegExp(`\b(${escaped.join("|")})\b`, flags);
+  return text.replace(regex, match => `<mark class="highlight" style="background-color:${color}">${match}</mark>`);
+}
 
-    window.onerror = function (msg, url, lineNo, columnNo, error) {
-      logError(error || msg);
-      return true;
-    };
-
-    upload.addEventListener("change", function () {
-      const file = this.files[0];
-      if (!file) return;
-
-      setProgress(10);
-      setStatus("📦 正在加载 EPUB 文件：" + file.name);
-      chaptersDropdown.innerHTML = '<option value="">📖 请选择章节</option>';
-
-      try {
-        book = ePub(file);
-        rendition = book.renderTo(viewer, {
-          width: "100%",
-          height: "100%",
-        });
-
-        currentKey = "epub-" + file.name + "-pos";
-        setProgress(30);
-
-        book.ready.then(() => {
-          setProgress(60);
-
-          // 自动恢复位置
-          const saved = localStorage.getItem(currentKey);
-          const start = saved || book.spine.get(0).href;
-
-          rendition.display(start).then(() => {
-            setProgress(100);
-            setStatus("✅ EPUB 加载成功！");
-          });
-
-          rendition.on("relocated", location => {
-            localStorage.setItem(currentKey, location.start.href);
-          });
-
-          return book.navigation.loaded;
-        }).then(nav => {
-          nav.toc.forEach((item, index) => {
-            const option = document.createElement("option");
-            option.textContent = item.label?.trim() || `章节 ${index + 1}`;
-            option.value = item.href;
-            chaptersDropdown.appendChild(option);
-          });
-        }).catch(logError);
-      } catch (err) {
-        logError(err);
-      }
+upload.addEventListener("change", function () {
+  const file = this.files[0];
+  if (!file) return;
+  setProgress(10);
+  setStatus("📥 加载 EPUB：" + file.name);
+  chapters.innerHTML = '<option value="">📖 请选择章节</option>';
+  book = ePub(file);
+  rendition = book.renderTo(viewer, { flow: "paginated", width: "100%", height: "100%" });
+  const storageKey = "epub-pos-" + file.name;
+  rendition.hooks.content.register(contents => {
+    const doc = contents.document;
+    const body = doc.body;
+    body.innerHTML = highlightWords(body.innerHTML, highlights, highlightColor, caseSensitive);
+  });
+  rendition.display(localStorage.getItem(storageKey) || undefined);
+  rendition.on("relocated", loc => localStorage.setItem(storageKey, loc.start.href));
+  book.ready.then(() => book.navigation.loaded).then(nav => {
+    nav.toc.forEach((item, i) => {
+      const opt = document.createElement("option");
+      opt.value = item.href;
+      opt.textContent = item.label || `章节 ${i+1}`;
+      chapters.appendChild(opt);
     });
+    applyTheme();
+    setProgress(100);
+    setStatus("✅ 加载完成！");
+  });
+});
 
-    chaptersDropdown.addEventListener("change", function () {
-      const href = this.value;
-      if (href && rendition) {
-        rendition.display(href).then(() => {
-          const title = this.options[this.selectedIndex].text;
-          setStatus("📘 跳转至：" + title);
-        });
-      }
-    });
+document.getElementById("prev").onclick = () => rendition.prev();
+document.getElementById("next").onclick = () => rendition.next();
+chapters.onchange = () => rendition.display(chapters.value);
+fontSelect.onchange = applyTheme;
+lineUp.onclick = () => { lineHeight += 0.1; applyTheme(); };
+lineDown.onclick = () => { lineHeight = Math.max(1, lineHeight - 0.1); applyTheme(); };
+colorSelect.onchange = () => { highlightColor = colorSelect.value; };
+caseCheckbox.onchange = () => { caseSensitive = caseCheckbox.checked; };
+nightToggle.onclick = () => document.body.classList.toggle("dark-mode");
+modeToggle.onclick = () => {
+  isPaged = !isPaged;
+  modeToggle.innerText = isPaged ? "📖 分页" : "📜 滚动";
+  rendition.flow(isPaged ? "paginated" : "scrolled");
+};
 
-    prevBtn.addEventListener("click", () => {
-      if (rendition) rendition.prev();
+dictUpload.addEventListener("change", async function () {
+  const file = this.files[0];
+  if (!file) return;
+  highlights.clear();
+  if (file.name.endsWith(".txt")) {
+    const text = await file.text();
+    text.split(/\r?\n/).forEach(word => {
+      if (word.trim()) highlights.add(word.trim());
     });
-
-    nextBtn.addEventListener("click", () => {
-      if (rendition) rendition.next();
+  } else if (file.name.endsWith(".xlsx")) {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: "array" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    rows.forEach(row => {
+      const word = row[0];
+      if (word && typeof word === "string") highlights.add(word.trim());
     });
-
-    zoomInBtn.addEventListener("click", () => {
-      if (rendition) {
-        fontSize += 10;
-        rendition.themes.fontSize(fontSize + "%");
-      }
-    });
-
-    zoomOutBtn.addEventListener("click", () => {
-      if (rendition && fontSize > 50) {
-        fontSize -= 10;
-        rendition.themes.fontSize(fontSize + "%");
-      }
-    });
-
-    toggleModeBtn.addEventListener("click", () => {
-      document.body.classList.toggle("dark-mode");
-    });
-  </script>
+  }
+  setStatus(`✅ 已加载词表：${highlights.size} 项`);
+});
+</script>
 </body>
 </html>

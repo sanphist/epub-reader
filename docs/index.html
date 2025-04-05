@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>EPUB Reader</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- ✅ 使用 unpkg CDN，保证 JSZip 能加载 -->
+  <!-- ✅ 保证兼容的 CDN 顺序 -->
   <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://unpkg.com/epubjs/dist/epub.min.js"></script>
 
   <style>
-    body, html {
+    html, body {
       margin: 0;
       padding: 0;
       height: 100%;
@@ -19,35 +19,56 @@
       display: flex;
       flex-direction: column;
     }
+
     #top-bar {
       padding: 10px;
       background: #fafafa;
       display: flex;
-      gap: 10px;
       flex-wrap: wrap;
+      gap: 10px;
       align-items: center;
     }
-    #upload, #chapters {
+
+    #top-bar > * {
       font-size: 16px;
+      padding: 4px 8px;
     }
+
     #viewer {
       flex-grow: 1;
       width: 100%;
       background: white;
     }
+
+    #progress-bar {
+      height: 4px;
+      background: #4caf50;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
     #status {
       font-size: 14px;
       padding: 10px;
       color: #333;
       background: #fff8dc;
-      min-height: 60px;
+      min-height: 50px;
       overflow-y: auto;
     }
-    #progress-bar {
-      height: 4px;
-      background: #4caf50;
-      width: 0%;
-      transition: width 0.3s;
+
+    .dark-mode {
+      background-color: #111 !important;
+      color: #eee !important;
+    }
+
+    .dark-mode #viewer {
+      background-color: #222 !important;
+    }
+
+    .dark-mode select, .dark-mode button, .dark-mode input {
+      background-color: #333 !important;
+      color: #eee !important;
+      border-color: #666 !important;
     }
   </style>
 </head>
@@ -58,7 +79,13 @@
     <select id="chapters">
       <option value="">📖 请选择章节</option>
     </select>
+    <button id="prev">⬅️ 上一页</button>
+    <button id="next">➡️ 下一页</button>
+    <button id="zoom-in">🔎 放大</button>
+    <button id="zoom-out">🔍 缩小</button>
+    <button id="toggle-mode">🌙 夜间</button>
   </div>
+
   <div id="progress-bar"></div>
   <div id="viewer"></div>
   <div id="status">📄 准备就绪，等待上传 EPUB 文件...</div>
@@ -69,8 +96,15 @@
     const status = document.getElementById("status");
     const progressBar = document.getElementById("progress-bar");
     const chaptersDropdown = document.getElementById("chapters");
+    const prevBtn = document.getElementById("prev");
+    const nextBtn = document.getElementById("next");
+    const zoomInBtn = document.getElementById("zoom-in");
+    const zoomOutBtn = document.getElementById("zoom-out");
+    const toggleModeBtn = document.getElementById("toggle-mode");
 
     let book, rendition;
+    let fontSize = 100; // 百分比
+    let currentKey = "epub-book-position";
 
     function setStatus(msg) {
       status.textContent = msg;
@@ -95,7 +129,7 @@
       if (!file) return;
 
       setProgress(10);
-      setStatus("📦 正在读取 EPUB 文件：" + file.name);
+      setStatus("📦 正在加载 EPUB 文件：" + file.name);
       chaptersDropdown.innerHTML = '<option value="">📖 请选择章节</option>';
 
       try {
@@ -105,22 +139,30 @@
           height: "100%",
         });
 
+        currentKey = "epub-" + file.name + "-pos";
         setProgress(30);
 
         book.ready.then(() => {
           setProgress(60);
-          const first = book.spine.get(0);
-          rendition.display(first.href)
-            .then(() => {
-              setProgress(100);
-              setStatus("✅ EPUB 加载成功！");
-            });
+
+          // 自动恢复位置
+          const saved = localStorage.getItem(currentKey);
+          const start = saved || book.spine.get(0).href;
+
+          rendition.display(start).then(() => {
+            setProgress(100);
+            setStatus("✅ EPUB 加载成功！");
+          });
+
+          rendition.on("relocated", location => {
+            localStorage.setItem(currentKey, location.start.href);
+          });
 
           return book.navigation.loaded;
         }).then(nav => {
           nav.toc.forEach((item, index) => {
             const option = document.createElement("option");
-            option.textContent = item.label;
+            option.textContent = item.label?.trim() || `章节 ${index + 1}`;
             option.value = item.href;
             chaptersDropdown.appendChild(option);
           });
@@ -134,11 +176,37 @@
       const href = this.value;
       if (href && rendition) {
         rendition.display(href).then(() => {
-          setStatus("📘 已跳转至章节：" + this.options[this.selectedIndex].text);
+          const title = this.options[this.selectedIndex].text;
+          setStatus("📘 跳转至：" + title);
         });
       }
     });
-  </script>
 
+    prevBtn.addEventListener("click", () => {
+      if (rendition) rendition.prev();
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (rendition) rendition.next();
+    });
+
+    zoomInBtn.addEventListener("click", () => {
+      if (rendition) {
+        fontSize += 10;
+        rendition.themes.fontSize(fontSize + "%");
+      }
+    });
+
+    zoomOutBtn.addEventListener("click", () => {
+      if (rendition && fontSize > 50) {
+        fontSize -= 10;
+        rendition.themes.fontSize(fontSize + "%");
+      }
+    });
+
+    toggleModeBtn.addEventListener("click", () => {
+      document.body.classList.toggle("dark-mode");
+    });
+  </script>
 </body>
 </html>

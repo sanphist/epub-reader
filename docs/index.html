@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -9,13 +8,43 @@
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
-    html,body { margin:0; padding:0; height:100%; font-family:sans-serif; display:flex; flex-direction:column; background:#f4f4f4; }
-    #top-bar { padding:6px; background:#eee; display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
-    #viewer { flex-grow:1; overflow:auto; background:#fff; }
-    #status { font-size:12px; padding:4px; background:#fff8dc; }
-    mark.highlight { background-color: yellow; }
-    body.dark { background:#121212; color:#eee; }
-    body.dark mark.highlight { background-color: #ffcc00; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      background: #f4f4f4;
+    }
+    #top-bar {
+      padding: 6px;
+      background: #eee;
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #viewer {
+      flex-grow: 1;
+      overflow: auto;
+      background: #fff;
+    }
+    #status {
+      font-size: 12px;
+      padding: 4px;
+      background: #fff8dc;
+    }
+    body.dark {
+      background: #121212;
+      color: #eee;
+    }
+    body.dark #viewer {
+      background: #121212;
+    }
+    body.dark #top-bar {
+      background: #333;
+    }
   </style>
 </head>
 <body>
@@ -42,17 +71,14 @@ const $ = id => document.getElementById(id);
 
 function injectStyle(doc) {
   const style = doc.createElement("style");
-  style.innerHTML = \`
+  style.innerHTML = `
     body, p, div, span {
-      font-family: "\${$("fontSelect").value}" !important;
-      font-size: \${fontSize}% !important;
-      background: \${isDark ? "#121212" : "#fff"} !important;
-      color: \${isDark ? "#eee" : "#000"} !important;
+      font-family: "${$("fontSelect").value}" !important;
+      font-size: ${fontSize}% !important;
+      background: ${isDark ? "#121212" : "#fff"} !important;
+      color: ${isDark ? "#eee" : "#000"} !important;
     }
-    mark.highlight {
-      background-color: \${highlightColor} !important;
-    }
-  \`;
+  `;
   doc.head.appendChild(style);
 }
 
@@ -67,7 +93,7 @@ function walkAndHighlight(node, regex) {
   }
   for (const textNode of toReplace) {
     const span = document.createElement("span");
-    span.innerHTML = textNode.nodeValue.replace(regex, m => \`<mark class="highlight">\${m}</mark>\`);
+    span.innerHTML = textNode.nodeValue.replace(regex, m => `<span style="background-color: ${highlightColor};">${m}</span>`);
     textNode.parentNode.replaceChild(span, textNode);
   }
 }
@@ -76,7 +102,7 @@ function highlightWords(doc) {
   if (!highlights.size) return;
   const words = [...highlights].filter(w => w.length >= 2).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const flags = caseSensitive ? "g" : "gi";
-  const regex = new RegExp("\\b(" + words.join("|") + ")\\b", flags);
+  const regex = new RegExp("(" + words.join("|") + ")", flags);
   walkAndHighlight(doc.body, regex);
 }
 
@@ -93,7 +119,7 @@ $("upload").onchange = function () {
   });
 
   book.loaded.navigation.then(nav => {
-    $("chapters").innerHTML = nav.toc.map(c => \`<option value="\${c.href}">\${c.label}</option>\`).join("");
+    $("chapters").innerHTML = nav.toc.map(c => `<option value="${c.href}">${c.label}</option>`).join("");
   });
 };
 
@@ -108,7 +134,11 @@ $("nextChapter").onclick = () => {
 $("fontSelect").onchange = () => rendition.display(rendition.location.start.href);
 $("incFont").onclick = () => { fontSize += 10; rendition.display(rendition.location.start.href); };
 $("decFont").onclick = () => { fontSize = Math.max(50, fontSize - 10); rendition.display(rendition.location.start.href); };
-$("toggleDark").onclick = () => { isDark = !isDark; document.body.classList.toggle("dark", isDark); rendition.display(rendition.location.start.href); };
+$("toggleDark").onclick = () => {
+  isDark = !isDark;
+  document.body.classList.toggle("dark", isDark);
+  rendition.display(rendition.location.start.href);
+};
 $("colorSelect").onchange = () => { highlightColor = $("colorSelect").value; rendition.display(rendition.location.start.href); };
 $("case").onchange = () => { caseSensitive = $("case").checked; rendition.display(rendition.location.start.href); };
 
@@ -125,7 +155,7 @@ $("dictUpload").onchange = async function () {
       if (r[0]) highlights.add(r[0].toString().trim());
     });
   }
-  $("status").textContent = \`✅ 词表加载完毕，共 \${highlights.size} 个词\`;
+  $("status").textContent = `✅ 词表加载完毕，共 ${highlights.size} 个词`;
   rendition.display(rendition.location.start.href);
 };
 </script>

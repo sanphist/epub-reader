@@ -6,7 +6,54 @@
   <title>EPUB 高亮词表阅读器</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js">
+<script>
+function highlightDOMTextNodes(root, words, color, sensitive) {
+  if (!words || words.size === 0) return;
+  const wordList = Array.from(words).sort((a, b) => b.length - a.length);
+  const escaped = wordList.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const flags = sensitive ? 'g' : 'gi';
+  const regex = new RegExp(`\\b(${escaped.join("|")})\\b`, flags);
+
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const parent = node.parentNode;
+      const frag = document.createDocumentFragment();
+      let lastIndex = 0;
+      const text = node.textContent;
+      let match;
+
+      while ((match = regex.exec(text)) !== null) {
+        const before = text.slice(lastIndex, match.index);
+        const matchedText = match[0];
+
+        if (before) frag.appendChild(document.createTextNode(before));
+
+        const mark = document.createElement("mark");
+        mark.className = "highlight";
+        mark.style.backgroundColor = color;
+        mark.textContent = matchedText;
+        frag.appendChild(mark);
+
+        lastIndex = match.index + matchedText.length;
+      }
+
+      if (lastIndex < text.length) {
+        frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+
+      if (frag.childNodes.length) {
+        parent.replaceChild(frag, node);
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE && node.childNodes && !["SCRIPT","STYLE","MARK"].includes(node.tagName)) {
+      Array.from(node.childNodes).forEach(walk);
+    }
+  }
+
+  walk(root);
+}
+</script>
+</script>
   <script src="https://unpkg.com/epubjs/dist/epub.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
@@ -213,7 +260,7 @@ function applyTheme() {
   rendition.themes.override("line-height", lineHeight.toString());
 }
 
-function highlightWords(text, words, color, sensitive) {
+// legacy removed(text, words, color, sensitive) {
   if (!words || words.length === 0) return text;
   words = Array.from(words).sort((a, b) => b.length - a.length);
   const escaped = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -240,7 +287,7 @@ upload.addEventListener("change", function () {
   rendition.hooks.content.register(contents => {
     const doc = contents.document;
     const body = doc.body;
-    body.innerHTML = highlightWords(body.innerHTML, highlights, highlightColor, caseSensitive);
+    highlightDOMTextNodes(body, highlights, highlightColor, caseSensitive);
   });
 
   book.ready.then(() => {

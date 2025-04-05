@@ -4,7 +4,11 @@
   <meta charset="UTF-8">
   <title>EPUB Reader</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- ✅ 必须先加载 JSZip，再加载 epubjs -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+
   <style>
     body, html {
       margin: 0;
@@ -74,7 +78,7 @@
 
     function logError(err) {
       console.error(err);
-      setStatus("❌ 错误: " + err.message);
+      setStatus("❌ 错误: " + (err?.message || err));
     }
 
     function setProgress(percent) {
@@ -82,7 +86,7 @@
     }
 
     window.onerror = function (msg, url, lineNo, columnNo, error) {
-      logError(error || { message: msg });
+      logError(error || msg);
       return true;
     };
 
@@ -105,7 +109,6 @@
 
         book.ready.then(() => {
           setProgress(60);
-
           const first = book.spine.get(0);
           rendition.display(first.href)
             .then(() => {
@@ -121,7 +124,7 @@
             option.value = item.href;
             chaptersDropdown.appendChild(option);
           });
-        }).catch(err => logError(err));
+        }).catch(logError);
       } catch (err) {
         logError(err);
       }

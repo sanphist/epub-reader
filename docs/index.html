@@ -2,79 +2,98 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>EPUB Reader (Debug Mode)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EPUB Reader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
   <style>
-    html, body {
+    body, html {
       margin: 0;
       padding: 0;
       height: 100%;
       font-family: sans-serif;
-      background: #f5f5f5;
+      background: #f4f4f4;
+      display: flex;
+      flex-direction: column;
     }
     #upload {
       margin: 10px;
       font-size: 16px;
-      z-index: 1000;
     }
     #viewer {
+      flex-grow: 1;
       width: 100%;
-      height: calc(100% - 90px);
-      background: white;
+      background: #fff;
     }
     #status {
-      padding: 10px;
       font-size: 14px;
+      padding: 10px;
       color: #333;
-      background: #fff3cd;
-      border-top: 1px solid #ddd;
+      background: #fff8dc;
+      min-height: 60px;
       overflow-y: auto;
-      max-height: 80px;
+    }
+    #progress-bar {
+      height: 4px;
+      background: #4caf50;
+      width: 0%;
+      transition: width 0.3s;
     }
   </style>
 </head>
 <body>
+
   <input type="file" id="upload" accept=".epub" />
+  <div id="progress-bar"></div>
   <div id="viewer"></div>
-  <div id="status">📄 等待文件上传...</div>
+  <div id="status">📄 准备就绪，等待上传 EPUB 文件...</div>
 
   <script>
-    const input = document.getElementById("upload");
+    const upload = document.getElementById("upload");
     const viewer = document.getElementById("viewer");
     const status = document.getElementById("status");
+    const progressBar = document.getElementById("progress-bar");
 
-    function log(msg) {
-      console.log(msg);
-      status.innerText += "\n" + msg;
+    function setStatus(msg) {
+      status.textContent = msg;
+    }
+
+    function logError(err) {
+      console.error(err);
+      setStatus("❌ 错误: " + err.message);
+    }
+
+    function setProgress(percent) {
+      progressBar.style.width = percent + "%";
     }
 
     window.onerror = function (msg, url, lineNo, columnNo, error) {
-      log("❌ 错误: " + msg + " (第 " + lineNo + " 行)");
-      return false;
+      logError(error || { message: msg });
+      return true;
     };
 
-    input.addEventListener("change", function () {
+    upload.addEventListener("change", function () {
       const file = this.files[0];
-      if (!file) {
-        log("⚠️ 没有选择文件。");
-        return;
-      }
+      if (!file) return;
 
-      log("📦 正在加载 EPUB 文件：" + file.name);
+      setProgress(10);
+      setStatus("📦 正在加载 EPUB 文件：" + file.name);
 
       try {
         const book = ePub(file);
         const rendition = book.renderTo(viewer, {
           width: "100%",
-          height: "100%"
+          height: "100%",
         });
 
+        setProgress(40);
         rendition.display()
-          .then(() => log("✅ 渲染成功！"))
-          .catch(err => log("❌ 渲染失败: " + err));
+          .then(() => {
+            setProgress(100);
+            setStatus("✅ 渲染成功！");
+          })
+          .catch(err => logError(err));
       } catch (err) {
-        log("❌ 异常：" + err.message);
+        logError(err);
       }
     });
   </script>

@@ -4,40 +4,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EPUB 高亮词表阅读器</title>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <title>EPUB 高亮词表阅读器（修复版）</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
-    html, body {
-      margin: 0; padding: 0;
-      height: 100%;
-      font-family: "Microsoft YaHei Light", sans-serif;
-      display: flex; flex-direction: column;
-      background: #f7f7f7;
-    }
-    #top-bar {
-      padding: 6px; background: #eee;
-      display: flex; flex-wrap: wrap;
-      align-items: center; gap: 5px;
-    }
-    #viewer {
-      flex-grow: 1; width: 100%;
-      overflow: auto; background: #fff;
-    }
-    #status {
-      font-size: 12px; padding: 5px;
-      background: #fff8dc; height: 22px;
-    }
-    mark.highlight {
-      background-color: yellow;
-    }
-    body.dark {
-      background: #121212; color: #eee;
-    }
-    body.dark #viewer {
-      background: #1e1e1e; color: #ddd;
-    }
+    html,body{margin:0;padding:0;height:100%;font-family:sans-serif;display:flex;flex-direction:column;}
+    #top-bar{padding:6px;background:#eee;display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
+    #viewer{flex:1;overflow:auto;background:#fff;}
+    #status{font-size:12px;padding:4px;background:#fff8dc;height:22px;}
+    .highlight{background-color:yellow;}
+    body.dark{background:#121212;color:#eee;}
   </style>
 </head>
 <body>
@@ -60,97 +37,94 @@
     <label><input type="checkbox" id="case"> 区分大小写</label>
   </div>
   <div id="viewer"></div>
-  <div id="status">📄 等待加载 EPUB...</div>
+  <div id="status">📄 等待上传 EPUB 文件...</div>
 
-  <script>
-    let book, rendition, highlights = new Set(), fontSize = 100, color = "yellow", isDark = false;
-    let caseSensitive = false;
+<script>
+let book, rendition, highlights = new Set(), fontSize = 100, highlightColor = "yellow", caseSensitive = false;
+let isDark = false;
 
-    const $ = id => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-    function applyTheme() {
-      if (!rendition) return;
-      rendition.themes.register("custom", {
-        "body": {
-          "font-family": $("fontSelect").value,
-          "font-size": fontSize + "%",
-          "background": isDark ? "#1e1e1e" : "#ffffff",
-          "color": isDark ? "#ddd" : "#000"
-        }
-      });
-      rendition.themes.select("custom");
-    }
+function applyOverrides() {
+  if (!rendition) return;
+  rendition.themes.override("font-size", fontSize + "%");
+  rendition.themes.override("font-family", $("fontSelect").value);
+}
 
-    function highlightText(doc) {
-      if (!highlights.size) return;
-      let words = [...highlights].sort((a,b)=>b.length-a.length).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-      let reg = new RegExp("\\b(" + words.join("|") + ")\\b", caseSensitive ? "g" : "gi");
-      let walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
-      while (walker.nextNode()) {
-        let node = walker.currentNode;
-        if (!node.nodeValue.trim()) continue;
-        let span = document.createElement("span");
-        span.innerHTML = node.nodeValue.replace(reg, m => `<mark class='highlight' style='background-color:${color}'>${m}</mark>`);
-        if (span.innerHTML !== node.nodeValue) node.parentNode.replaceChild(span, node);
-      }
-    }
+function applyHighlights(doc) {
+  if (!highlights.size) return;
+  const words = [...highlights].filter(w => w.length >= 2).sort((a,b)=>b.length-a.length)
+    .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const flags = caseSensitive ? "g" : "gi";
+  const regex = new RegExp("\\b(" + words.join("|") + ")\\b", flags);
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const parent = node.parentNode;
+    if (!node.nodeValue.trim()) continue;
+    const span = document.createElement("span");
+    span.innerHTML = node.nodeValue.replace(regex, match => 
+      `<mark class='highlight' style='background-color:${highlightColor}'>${match}</mark>`);
+    if (span.innerHTML !== node.nodeValue) parent.replaceChild(span, node);
+  }
+}
 
-    $("upload").onchange = function () {
-      let file = this.files[0];
-      book = ePub(file);
-      rendition = book.renderTo("viewer", {
-        flow: "scrolled-doc",
-        width: "100%", height: "100%"
-      });
-      rendition.display();
+$("upload").onchange = function () {
+  const file = this.files[0];
+  book = ePub(file);
+  rendition = book.renderTo("viewer", { flow: "scrolled-doc", width: "100%", height: "100%" });
+  rendition.display();
 
-      book.loaded.navigation.then(nav => {
-        $("chapters").innerHTML = nav.toc.map(c => `<option value="${c.href}">${c.label}</option>`).join('');
-      });
+  // 保证高亮每一章节都生效
+  rendition.hooks.content.register(contents => {
+    applyOverrides();
+    applyHighlights(contents.document);
+  });
 
-      rendition.on("rendered", () => {
-        applyTheme();
-        let ifr = $("viewer").querySelector("iframe");
-        if (ifr) highlightText(ifr.contentDocument);
-      });
-    };
+  book.loaded.navigation.then(nav => {
+    $("chapters").innerHTML = nav.toc.map(c => 
+      `<option value="${c.href}">${c.label}</option>`).join("");
+  });
+};
 
-    $("chapters").onchange = () => rendition.display($("chapters").value);
-    $("prev").onclick = () => rendition.prev();
-    $("next").onclick = () => rendition.next();
-    $("nextChapter").onclick = () => {
-      let items = book.spine.spineItems;
-      let idx = items.findIndex(i => i.href === rendition.location.start.href);
-      if (idx < items.length - 1) rendition.display(items[idx + 1].href);
-    };
+$("chapters").onchange = () => rendition.display($("chapters").value);
+$("prev").onclick = () => rendition.prev();
+$("next").onclick = () => rendition.next();
 
-    $("fontSelect").onchange = applyTheme;
-    $("incFont").onclick = () => { fontSize += 10; applyTheme(); };
-    $("decFont").onclick = () => { fontSize -= 10; applyTheme(); };
-    $("toggleDark").onclick = () => {
-      isDark = !isDark;
-      document.body.classList.toggle("dark", isDark);
-      applyTheme();
-    };
-    $("colorSelect").onchange = () => color = $("colorSelect").value;
-    $("case").onchange = () => caseSensitive = $("case").checked;
+$("nextChapter").onclick = () => {
+  const spine = book.spine.spineItems;
+  const idx = spine.findIndex(i => i.href === rendition.location.start.href);
+  if (idx >= 0 && idx < spine.length - 1) {
+    rendition.display(spine[idx + 1].href);
+  }
+};
 
-    $("dictUpload").onchange = async function () {
-      highlights.clear();
-      let file = this.files[0];
-      if (file.name.endsWith(".txt")) {
-        let text = await file.text();
-        text.split(/\r?\n/).forEach(w => highlights.add(w.trim()));
-      } else if (file.name.endsWith(".xlsx")) {
-        let data = await file.arrayBuffer();
-        let wb = XLSX.read(data, { type: "array" });
-        XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).forEach(r => {
-          if (r[0]) highlights.add(r[0].toString().trim());
-        });
-      }
-      $("status").textContent = "✅ 已加载词表：" + highlights.size + " 项";
-      if (rendition) rendition.display(rendition.location.start.href);
-    };
-  </script>
+$("fontSelect").onchange = applyOverrides;
+$("incFont").onclick = () => { fontSize += 10; applyOverrides(); };
+$("decFont").onclick = () => { fontSize = Math.max(50, fontSize - 10); applyOverrides(); };
+$("toggleDark").onclick = () => {
+  isDark = !isDark;
+  document.body.classList.toggle("dark", isDark);
+  applyOverrides();
+};
+$("colorSelect").onchange = () => highlightColor = $("colorSelect").value;
+$("case").onchange = () => caseSensitive = $("case").checked;
+
+$("dictUpload").onchange = async function () {
+  highlights.clear();
+  const file = this.files[0];
+  if (file.name.endsWith(".txt")) {
+    const text = await file.text();
+    text.split(/\r?\n/).forEach(w => highlights.add(w.trim()));
+  } else if (file.name.endsWith(".xlsx")) {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: "array" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+    rows.forEach(r => { if (r[0]) highlights.add(r[0].toString().trim()); });
+  }
+  $("status").textContent = "✅ 已加载词表：" + highlights.size + " 项";
+  if (rendition) rendition.display(rendition.location.start.href);
+};
+</script>
 </body>
 </html>

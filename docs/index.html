@@ -1,1 +1,85 @@
 
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>完整版 EPUB 高亮词表阅读器（含下一章）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://unpkg.com/epubjs/dist/epub.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    html,body{height:100%;margin:0;padding:0;overflow:hidden;font-family:sans-serif;background:#f4f4f4;display:flex;flex-direction:column;}
+    #top-bar{padding:10px;background:#fafafa;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    #viewer{flex-grow:1;background:white;}
+    #progress-bar{height:4px;background:#4caf50;width:0%;}
+    #status{padding:8px;background:#fff8dc;overflow:auto;font-size:14px;}
+    .dark-mode{background-color:#121212;color:#eaeaea;}
+    .highlight{background-color:yellow;}
+  </style>
+</head>
+<body>
+<div id="top-bar">
+  <input type="file" id="upload" accept=".epub"/>
+  <select id="chapters"><option>选择章节</option></select>
+  <button id="prev">⬅️上一页</button>
+  <button id="next">➡️下一页</button>
+  <button id="nextChapter">⏩下一章</button>
+  <select id="fontSelect">
+    <option value="Microsoft YaHei Light">微软雅黑Light</option>
+    <option value="serif">Serif</option>
+    <option value="sans-serif">Sans-serif</option>
+  </select>
+  <button id="lineUp">🔼增行距</button>
+  <button id="lineDown">🔽减行距</button>
+  <button id="modeToggle">📖分页</button>
+  <button id="nightToggle">🌙夜间</button>
+  <input type="file" id="dictUpload" accept=".txt,.xlsx"/>
+  <select id="colorSelect">
+    <option value="yellow">黄色</option>
+    <option value="lightblue">蓝色</option>
+    <option value="pink">粉色</option>
+  </select>
+  <label><input type="checkbox" id="caseSensitive"/>大小写</label>
+</div>
+<div id="progress-bar"></div><div id="viewer"></div><div id="status">📄请上传 EPUB 文件。</div>
+<script>
+if (!window.__EPUB_LOADED__) {
+  window.__EPUB_LOADED__ = true;
+  let book,rendition,highlights=new Set(),fontSize=100,lineHeight=1.5,isPaged=false,highlightColor="yellow";
+  const viewer=document.getElementById("viewer"),chapters=document.getElementById("chapters"),status=document.getElementById("status");
+  const applyTheme=()=>rendition.themes.register("theme",{"body":{"font-family":fontSelect.value,"font-size":fontSize+"%","line-height":lineHeight,"background":isDark?"#121212":"#fff","color":isDark?"#eaeaea":"#000"},".highlight":{"background-color":highlightColor}})&&rendition.themes.select("theme");
+  let isDark=false,caseSensitive=false;
+
+  upload.onchange=()=>{
+    book=ePub(upload.files[0]);rendition=book.renderTo(viewer,{flow:"scrolled",width:"100%",height:"100%"});rendition.display();
+    book.navigation.loaded.then(nav=>chapters.innerHTML=nav.toc.map(c=>`<option value="${c.href}">${c.label}</option>`).join(""));
+    rendition.on("rendered",applyTheme);
+  };
+  chapters.onchange=()=>rendition.display(chapters.value);
+  prev.onclick=()=>rendition.prev();next.onclick=()=>rendition.next();
+
+  nextChapter.onclick=()=>{
+    const cur=rendition.location.start.href,items=book.spine.spineItems,idx=items.findIndex(i=>i.href===cur);
+    if(idx>=0&&idx<items.length-1)rendition.display(items[idx+1].href);else alert("最后一章了！");
+  };
+
+  fontSelect.onchange=applyTheme;lineUp.onclick=()=>{lineHeight+=0.1;applyTheme();};lineDown.onclick=()=>{lineHeight=Math.max(1,lineHeight-0.1);applyTheme();};
+  modeToggle.onclick=()=>{isPaged=!isPaged;rendition.flow(isPaged?"paginated":"scrolled");};nightToggle.onclick=()=>{isDark=!isDark;applyTheme();};
+  colorSelect.onchange=()=>{highlightColor=colorSelect.value;applyTheme();};caseSensitive.onchange=()=>caseSensitive=caseSensitive.checked;
+
+  dictUpload.onchange=async()=>{
+    highlights.clear();const f=dictUpload.files[0];
+    const t=f.name.endsWith(".txt")?await f.text():XLSX.utils.sheet_to_csv(XLSX.read(await f.arrayBuffer(),{type:"array"}).Sheets.Sheet1);
+    t.split(/\r?\n/).forEach(w=>{if(/^[a-zA-Z]{2,}$/.test(w))highlights.add(w.trim());});
+    status.innerText=`✅词表加载：${highlights.size}个词`;rendition.display(rendition.location.start.href);
+  };
+  
+  rendition.hooks.content.register(c=>{
+    const doc=c.document;doc.body.innerHTML=doc.body.innerHTML.replace(new RegExp(`(?<![a-zA-Z])(${[...highlights].join("|")})(?![a-zA-Z])`,caseSensitive?"g":"gi"),`<mark class="highlight">$1</mark>`);
+  });
+}
+</script>
+</body>
+</html>
+

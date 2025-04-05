@@ -1,30 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Walden EPUB Reader</title>
+  <meta charset="UTF-8">
+  <title>EPUB Reader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
   <style>
     html, body {
       margin: 0;
+      padding: 0;
       height: 100%;
       overflow: hidden;
+      font-family: sans-serif;
+      background: #f0f0f0;
     }
+
+    #upload {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+    }
+
     #viewer {
-      height: 100%;
-      width: 100%;
+      position: absolute;
+      top: 50px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: white;
     }
   </style>
 </head>
 <body>
+  <input type="file" id="upload" accept=".epub">
   <div id="viewer"></div>
+
   <script>
-    const book = ePub("Walden.epub");
-    const rendition = book.renderTo("viewer", {
-      width: "100%",
-      height: "100%",
+    const input = document.getElementById("upload");
+    const viewer = document.getElementById("viewer");
+
+    input.addEventListener("change", function () {
+      const file = this.files[0];
+      if (file && file.name.endsWith(".epub")) {
+        const book = ePub(file);
+        const rendition = book.renderTo("viewer", {
+          width: "100%",
+          height: "100%"
+        });
+        rendition.display();
+      } else {
+        alert("请选择 EPUB 文件！");
+      }
     });
-    rendition.display();
   </script>
 </body>
 </html>
